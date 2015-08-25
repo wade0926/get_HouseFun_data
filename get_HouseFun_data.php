@@ -1,4 +1,5 @@
 <?php
+exit;
 require_once("../db.php");
 set_time_limit(0);
 mysql_query("SET NAMES 'UTF8'");
