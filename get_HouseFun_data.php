@@ -141,8 +141,10 @@ function get_broker_id($get_limit)
 		$res = file_get_contents($url);
 		$res = json_decode($res,true);
 		
+		//
 		//preg_match('/potrait\/.*?\/(.*?)\./',$res['Data']['Potrait'],$preg_data);
 		//echo $preg_data[1];exit;		
+		
 		
 		
 						
