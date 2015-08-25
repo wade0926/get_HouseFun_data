@@ -38,7 +38,7 @@ switch($act)
 	//Step 2：至房屋detail 抓broker id
 	case 2:
 		//設定抓取的限制次數
-		$get_limit = 3;
+		$get_limit = 10;
 		
 		//抓個人詳細資料
 		get_broker_id($get_limit);
@@ -115,13 +115,21 @@ function get_detail_links_from_list($total_pages)
 
 //Step 2：至房屋detail 抓broker id
 function get_broker_id($get_limit)
-{
-	//查詢housefun_detail_link
-	$sql = "SELECT hdl_link_id FROM housefun_detail_link WHERE hdl_del = 0 LIMIT ".$get_limit;	
-	$res = mysql_query($sql);
-					
-	while($row = mysql_fetch_array($res))
+{	
+	if($get_limit != 0)
 	{
+		$set_limit = 'LIMIT '.$get_limit;
+	}
+		
+	//查詢housefun_detail_link
+	$sql = "SELECT hdl_link_id FROM housefun_detail_link WHERE hdl_del = 0 ".$set_limit;		
+	$res_detail_link = mysql_query($sql);
+						
+	while($row = mysql_fetch_array($res_detail_link))
+	{
+		//try
+		$row['hdl_link_id'] = 1703298;
+				
 		//拿	query-shop-id			
 		$target_url = 'http://buy.housefun.com.tw/buy/house/'.$row['hdl_link_id'];		
 		$page_data = file_get_contents($target_url);		
@@ -131,71 +139,73 @@ function get_broker_id($get_limit)
 		//用query-shop-id 拿broker id
 		$url = 'http://buy.housefun.com.tw/ashx/Buy/New/AgentInfo.ashx?RequestPackage={"Method":"Inquire","Data":{"UserMode":1,"HFID":"123","CaseID":"123","WebAgentID":"'.$query_shop_id.'"}}';
 		$res = file_get_contents($url);
-		$res = json_decode($res,true);		
-		preg_match('/http:\/\/i.housefun.com.tw\/(.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-		$broker_id = $preg_data[1];
+		$res = json_decode($res,true);
 		
+		//preg_match('/potrait\/.*?\/(.*?)\./',$res['Data']['Potrait'],$preg_data);
+		//echo $preg_data[1];exit;
+		
+		
+		
+						
+		preg_match('/http:\/\/i.housefun.com.tw\/(.*)/',$res['Data']['AGHomePageURL'],$preg_data);
+		$broker_id = $preg_data[1];		
+				
 		//查詢該broker id 是否重覆
 		$sql = "SELECT hb_id FROM housefun_broker WHERE hb_broker_id = '".$broker_id."' AND hb_del = 0 LIMIT 1";	
 		$res = mysql_query($sql);	
 		$rows = mysql_num_rows($res);
-		
+				
 		//如果沒有重覆
 		if($rows != 1)
-		{
+		{			
 			//用broker id 獲取broker deatil page
 			$url = 'http://i.housefun.com.tw/'.$broker_id;			
 			$page_data = file_get_contents($url);
 			
 			//========== 擷取broker 資料 op ==========
-			//獲取姓名			
+			//獲取「姓名」
 			preg_match('/<span id=\"ctl00_AGFullName\">(.*?)<\/span>/',$page_data,$broker_name);
 			$broker_name = $broker_name[1];
 			
+			//====== 獲取「就職公司」 及 「分店名稱」 op ======
+			preg_match('/<span id=\"ctl00_ShopFullShopName\">(.*?)<\/span>/',$page_data,$preg_match_data);
+			$preg_match_data = $preg_match_data[1];
 			
+			//如果有<br />，把它濾掉
+			$preg_match_data = str_replace('<br />','',$preg_match_data);			
+			$preg_match_data = explode(" ",$preg_match_data);			
+			$broker_company = $preg_match_data[0];
+			$broker_company_branch = $preg_match_data[1];						
+			//====== 獲取「就職公司」 及 「分店名稱」 ed ======
 			
-			echo $broker_name;exit;
+			//擷取電話			
+			preg_match('/<span id=\"ctl00_AGMobilePhone\">(.*?)<\/span>/',$page_data,$broker_phone);
+			$broker_phone = $broker_phone[1];	
 			
-			$sql = "INSERT INTO housefun_detail_link (hdl_link_id) VALUES ('".$row."')";
+			//擷取第一個房屋地區						
+			$house_ajax_info = get_house_info_ajax($broker_id);
+			preg_match('/<li><span style=\"float: left\">(.*?)<\/span><\/li>/',$house_ajax_info,$broker_serve_area);
+			$broker_serve_area = substr($broker_serve_area[1],0,18);			
+			
+			$sql = "INSERT INTO housefun_broker (hb_broker_id,hb_name,hb_company,hb_company_branch,hb_phone,hb_serve_area) VALUES 
+			        ('".$broker_id."','".$broker_name."','".$broker_company."','".$broker_company_branch."','".$broker_phone."','".$broker_serve_area."')";
 			mysql_query($sql);
 			//========== 擷取broker 資料 op ==========			
-		}
-		
-		exit;
-		
-		
-											
-		//找姓名
-		preg_match("/<span class=\"name\">.*?<h3>(.*?)<\/h3>/s",$page_data,$name);			
-		$name = $name[1];			
-		
-		//找就職公司
-		preg_match("/<li>就職公司：<span>(.*?)<\/span> <span>(.*?)<\/span><\/li>/",$page_data,$company);			
-		$company = $company[1].' '.$company[2];
-		
-		//找行動電話
-		preg_match("/<li>行動電話：<span id=\"phone-num\" class=\"org\">(.*?)<\/span><\/li>/",$page_data,$cell_phone);
-		$cell_phone = $cell_phone[1];
-				
-		//找服務區域
-		preg_match("/<li>服務區域：<span>(.*?)<\/span><\/li>/",$page_data,$serve_area);
-		$serve_area = $serve_area[1];
-		
-		//找E-mail
-		preg_match("/<li class=\"long\">E-mail：<span>(.*?)<\/span><\/li>/",$page_data,$mail);			
-		$mail = $mail[1];
-							
-		$sql = 'UPDATE 591_link_data SET 5_name = "'.$name.'",5_company = "'.$company.'",5_cell_phone = "'.$cell_phone.'",5_serve_area = "'.$serve_area.'",5_mail = "'.$mail.'" WHERE 5_id = '.$row['5_id'];		
-		mysql_query($sql);				
+		}		
 	}
 	
 	echo 'done';	
 }	
 
-function exec_curl($target_url)
+function get_house_info_ajax($broker_id)
 {
+	$target_url = 'http://i.housefun.com.tw/Ashx/HouseFunAgent/AGGetHouseList.ashx';			
+	$post_data = 'ShopID='.$broker_id.'&order=1&ordertype=up&srhchannel=undefined&srhprice=0&srhpu=0&srhct=0&PM=1';
+	
 	$ch = curl_init($target_url); 
-	curl_setopt($ch,CURLOPT_RETURNTRANSFER,1); 	
+	curl_setopt($ch,CURLOPT_RETURNTRANSFER,1);
+	curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 1);
+	curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);	
 	$res = curl_exec ($ch);
 	curl_close ($ch);
 	
