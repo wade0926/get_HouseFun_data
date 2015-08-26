@@ -38,11 +38,10 @@ switch($act)
 	
 	//Step 2：至房屋detail 抓broker id
 	case 2:
-		//設定抓取的限制次數
-		$get_limit = 10;
+		$set_limit = 'LIMIT 3,3';
 		
 		//抓個人詳細資料
-		get_broker_id($get_limit);
+		get_broker_id($set_limit);
 	break;
 	
 	case 3:		
@@ -115,22 +114,16 @@ function get_detail_links_from_list($total_pages)
 }
 
 //Step 2：至房屋detail 抓broker id
-function get_broker_id($get_limit)
-{	
-	if($get_limit != 0)
-	{
-		$set_limit = 'LIMIT '.$get_limit;
-	}
-		
+function get_broker_id($set_limit)
+{
+	$set_limit = '';
+			
 	//查詢housefun_detail_link
-	$sql = "SELECT hdl_link_id FROM housefun_detail_link WHERE hdl_del = 0 ".$set_limit;		
+	$sql = "SELECT hdl_id,hdl_link_id FROM housefun_detail_link WHERE hdl_del = 0 ".$set_limit;		
 	$res_detail_link = mysql_query($sql);
 						
 	while($row = mysql_fetch_array($res_detail_link))
-	{
-		//try
-		$row['hdl_link_id'] = 1703298;
-				
+	{				
 		//拿	query-shop-id			
 		$target_url = 'http://buy.housefun.com.tw/buy/house/'.$row['hdl_link_id'];		
 		$page_data = file_get_contents($target_url);		
@@ -141,17 +134,10 @@ function get_broker_id($get_limit)
 		$url = 'http://buy.housefun.com.tw/ashx/Buy/New/AgentInfo.ashx?RequestPackage={"Method":"Inquire","Data":{"UserMode":1,"HFID":"123","CaseID":"123","WebAgentID":"'.$query_shop_id.'"}}';
 		$res = file_get_contents($url);
 		$res = json_decode($res,true);
-		
-		//
-		//preg_match('/potrait\/.*?\/(.*?)\./',$res['Data']['Potrait'],$preg_data);
-		//echo $preg_data[1];exit;		
-		
-		
-		
-						
+								
 		preg_match('/http:\/\/i.housefun.com.tw\/(.*)/',$res['Data']['AGHomePageURL'],$preg_data);
 		$broker_id = $preg_data[1];		
-				
+									
 		//查詢該broker id 是否重覆
 		$sql = "SELECT hb_id FROM housefun_broker WHERE hb_broker_id = '".$broker_id."' AND hb_del = 0 LIMIT 1";	
 		$res = mysql_query($sql);	
@@ -184,13 +170,18 @@ function get_broker_id($get_limit)
 			preg_match('/<span id=\"ctl00_AGMobilePhone\">(.*?)<\/span>/',$page_data,$broker_phone);
 			$broker_phone = $broker_phone[1];	
 			
-			//擷取第一個房屋地區						
-			$house_ajax_info = get_house_info_ajax($broker_id);
+			//====== 擷取第一個房屋地區 op ======
+			//找ajax 用的broker id(因為有時候會跟原本的broker id 不一樣)
+			preg_match('/<input type=\"hidden\" name=\"ctl00\$ContentPlaceHolder1\$ShopID\" id=\"ShopID\" value=\"(.*?)\" \/>/',$page_data,$for_ajax_broker_id);
+			$for_ajax_broker_id = $for_ajax_broker_id[1];
+								
+			$house_ajax_info = get_house_info_ajax($for_ajax_broker_id);
 			preg_match('/<li><span style=\"float: left\">(.*?)<\/span><\/li>/',$house_ajax_info,$broker_serve_area);
-			$broker_serve_area = substr($broker_serve_area[1],0,18);			
+			$broker_serve_area = substr($broker_serve_area[1],0,18);
+			//====== 擷取第一個房屋地區 ed ======
 			
-			$sql = "INSERT INTO housefun_broker (hb_broker_id,hb_name,hb_company,hb_company_branch,hb_phone,hb_serve_area) VALUES 
-			        ('".$broker_id."','".$broker_name."','".$broker_company."','".$broker_company_branch."','".$broker_phone."','".$broker_serve_area."')";
+			$sql = "INSERT INTO housefun_broker (hb_broker_id,hb_name,hb_company,hb_company_branch,hb_phone,hb_serve_area,now_number) VALUES 
+			        ('".$broker_id."','".$broker_name."','".$broker_company."','".$broker_company_branch."','".$broker_phone."','".$broker_serve_area."','".$row['hdl_id']."')";
 			mysql_query($sql);
 			//========== 擷取broker 資料 op ==========			
 		}		
